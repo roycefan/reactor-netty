@@ -81,8 +81,8 @@ final class PooledConnectionProvider implements ConnectionProvider {
 			PlatformDependent.newConcurrentHashMap();
 	final String      name;
 	final int         maxConnections;
-	final int         maxPendingAcquire;
-	final long        acquireTimeout;
+	final int         pendingAcquireMaxCount;
+	final long        pendingAcquireTime;
 	final long        maxIdleTime;
 	final long        maxLifeTime;
 	final PoolFactory poolFactory;
@@ -90,8 +90,8 @@ final class PooledConnectionProvider implements ConnectionProvider {
 	PooledConnectionProvider(Builder builder){
 		this.name = builder.name;
 		this.maxConnections = builder.maxConnections;
-		this.maxPendingAcquire = builder.maxPendingAcquire;
-		this.acquireTimeout = builder.acquireTimeout.toMillis();
+		this.pendingAcquireMaxCount = builder.pendingAcquireMaxCount;
+		this.pendingAcquireTime = builder.pendingAcquireTime.toMillis();
 		this.maxIdleTime = builder.maxIdleTime != null ? builder.maxIdleTime.toMillis() : -1;
 		this.maxLifeTime = builder.maxLifeTime != null ? builder.maxLifeTime.toMillis() : -1;
 		this.poolFactory = allocator -> {
@@ -101,8 +101,8 @@ final class PooledConnectionProvider implements ConnectionProvider {
 					           .evictionPredicate(DEFAULT_EVICTION_PREDICATE
 					                   .or((poolable, meta) -> (maxIdleTime != -1 && meta.idleTime() >= maxIdleTime)
 					                           || (maxLifeTime != -1 && meta.lifeTime() >= maxLifeTime)))
-					           .maxPendingAcquire(maxPendingAcquire);
-			if (maxConnections != MAX_CONNECTIONS_ELASTIC) {
+					           .maxPendingAcquire(pendingAcquireMaxCount);
+			if (maxConnections != MAX_CONNECTIONS_UNBOUNDED) {
 				pb = pb.sizeBetween(0, maxConnections);
 			}
 			return pb.fifo();
@@ -179,7 +179,7 @@ final class PooledConnectionProvider implements ConnectionProvider {
 				return newPool;
 			});
 
-			disposableAcquire(sink, obs, pool, opsFactory, acquireTimeout);
+			disposableAcquire(sink, obs, pool, opsFactory, pendingAcquireTime);
 
 		});
 
@@ -216,8 +216,8 @@ final class PooledConnectionProvider implements ConnectionProvider {
 		return "PooledConnectionProvider {" +
 		               "name='" + name + '\'' +
 		               ", maxConnections=" + maxConnections +
-		               ", maxPendingAcquire=" + maxPendingAcquire +
-		               ", acquireTimeout=" + acquireTimeout +
+		               ", pendingAcquireMaxCount=" + pendingAcquireMaxCount +
+		               ", pendingAcquireTime=" + pendingAcquireTime +
 		               ", maxIdleTime=" + maxIdleTime +
 		               ", maxLifeTime=" + maxLifeTime +
 		               '}';

@@ -320,13 +320,13 @@ The following example shows how to do so:
 import reactor.netty.Connection;
 import reactor.netty.resources.ConnectionProvider;
 import reactor.netty.tcp.TcpClient;
-import static reactor.netty.resources.ConnectionProvider.MAX_CONNECTIONS_ELASTIC;
+import static reactor.netty.resources.ConnectionProvider.MAX_CONNECTIONS_UNBOUNDED;
 
 public class Application {
 
     public static void main(String[] args) {
         ConnectionProvider provider =
-                ConnectionProvider.create("elastic", MAX_CONNECTIONS_ELASTIC);
+                ConnectionProvider.create("elastic", MAX_CONNECTIONS_UNBOUNDED);
         Connection connection =
                 TcpClient.create(provider)
                          .host("example.com")
