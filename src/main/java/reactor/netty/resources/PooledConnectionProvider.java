@@ -55,7 +55,6 @@ import reactor.netty.channel.BootstrapHandlers;
 import reactor.netty.channel.ChannelOperations;
 import reactor.pool.InstrumentedPool;
 import reactor.pool.PoolBuilder;
-import reactor.pool.PoolConfig;
 import reactor.pool.PooledRef;
 import reactor.pool.PooledRefMetadata;
 import reactor.util.Logger;
@@ -82,7 +81,7 @@ final class PooledConnectionProvider implements ConnectionProvider {
 	final String      name;
 	final int         maxConnections;
 	final int         pendingAcquireMaxCount;
-	final long        pendingAcquireTime;
+	final long        pendingAcquireTimeout;
 	final long        maxIdleTime;
 	final long        maxLifeTime;
 	final PoolFactory poolFactory;
@@ -91,22 +90,18 @@ final class PooledConnectionProvider implements ConnectionProvider {
 		this.name = builder.name;
 		this.maxConnections = builder.maxConnections;
 		this.pendingAcquireMaxCount = builder.pendingAcquireMaxCount;
-		this.pendingAcquireTime = builder.pendingAcquireTime.toMillis();
+		this.pendingAcquireTimeout = builder.pendingAcquireTimeout.toMillis();
 		this.maxIdleTime = builder.maxIdleTime != null ? builder.maxIdleTime.toMillis() : -1;
 		this.maxLifeTime = builder.maxLifeTime != null ? builder.maxLifeTime.toMillis() : -1;
-		this.poolFactory = allocator -> {
-			PoolBuilder<PooledConnection, PoolConfig<PooledConnection>> pb =
-					PoolBuilder.from(allocator)
-					           .destroyHandler(DEFAULT_DESTROY_HANDLER)
-					           .evictionPredicate(DEFAULT_EVICTION_PREDICATE
-					                   .or((poolable, meta) -> (maxIdleTime != -1 && meta.idleTime() >= maxIdleTime)
-					                           || (maxLifeTime != -1 && meta.lifeTime() >= maxLifeTime)))
-					           .maxPendingAcquire(pendingAcquireMaxCount);
-			if (maxConnections != MAX_CONNECTIONS_UNBOUNDED) {
-				pb = pb.sizeBetween(0, maxConnections);
-			}
-			return pb.fifo();
-		};
+		this.poolFactory = allocator ->
+				PoolBuilder.from(allocator)
+				           .destroyHandler(DEFAULT_DESTROY_HANDLER)
+				           .evictionPredicate(DEFAULT_EVICTION_PREDICATE
+				                   .or((poolable, meta) -> (maxIdleTime != -1 && meta.idleTime() >= maxIdleTime)
+				                           || (maxLifeTime != -1 && meta.lifeTime() >= maxLifeTime)))
+				           .maxPendingAcquire(pendingAcquireMaxCount)
+				           .sizeBetween(0, maxConnections)
+				           .fifo();
 	}
 
 	@Override
@@ -162,9 +157,8 @@ final class PooledConnectionProvider implements ConnectionProvider {
 
 			InstrumentedPool<PooledConnection> pool = channelPools.computeIfAbsent(holder, poolKey -> {
 				if (log.isDebugEnabled()) {
-					String poolType = maxConnections == -1 ? "elastic" : "fixed";
-					log.debug("Creating a new {} client pool [{}] for [{}]",
-							poolType, this, bootstrap.config().remoteAddress());
+					log.debug("Creating a new client pool [{}] for [{}]",
+							this, bootstrap.config().remoteAddress());
 				}
 
 				InstrumentedPool<PooledConnection> newPool =
@@ -179,7 +173,7 @@ final class PooledConnectionProvider implements ConnectionProvider {
 				return newPool;
 			});
 
-			disposableAcquire(sink, obs, pool, opsFactory, pendingAcquireTime);
+			disposableAcquire(sink, obs, pool, opsFactory, pendingAcquireTimeout);
 
 		});
 
@@ -217,7 +211,7 @@ final class PooledConnectionProvider implements ConnectionProvider {
 		               "name='" + name + '\'' +
 		               ", maxConnections=" + maxConnections +
 		               ", pendingAcquireMaxCount=" + pendingAcquireMaxCount +
-		               ", pendingAcquireTime=" + pendingAcquireTime +
+		               ", pendingAcquireTimeout=" + pendingAcquireTimeout +
 		               ", maxIdleTime=" + maxIdleTime +
 		               ", maxLifeTime=" + maxLifeTime +
 		               '}';

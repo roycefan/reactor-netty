@@ -38,9 +38,7 @@ import java.util.concurrent.TimeoutException;
 @FunctionalInterface
 public interface ConnectionProvider extends Disposable {
 
-	int MAX_CONNECTIONS_UNBOUNDED = -1;
 	int PENDING_ACQUIRE_UNBOUNDED = -1;
-	int PENDING_ACQUIRE_TIME_NEVER_WAIT = 0;
 
 	/**
 	 * Default max connections, if -1 will never wait to acquire before opening a new
@@ -167,7 +165,9 @@ public interface ConnectionProvider extends Disposable {
 	 */
 	@Deprecated
 	static ConnectionProvider elastic(String name, @Nullable Duration maxIdleTime, @Nullable Duration maxLifeTime) {
-		return builder(name).maxConnections(MAX_CONNECTIONS_UNBOUNDED)
+		return builder(name).maxConnections(Integer.MAX_VALUE)
+		                    .pendingAcquireTimeout(Duration.ofMillis(0))
+		                    .pendingAcquireMaxCount(PENDING_ACQUIRE_UNBOUNDED)
 		                    .maxIdleTime(maxIdleTime)
 		                    .maxLifeTime(maxLifeTime)
 		                    .build();
@@ -274,7 +274,7 @@ public interface ConnectionProvider extends Disposable {
 	@Deprecated
 	static ConnectionProvider fixed(String name, int maxConnections, long acquireTimeout, @Nullable Duration maxIdleTime, @Nullable Duration maxLifeTime) {
 		return builder(name).maxConnections(maxConnections)
-		                    .pendingAcquireTime(Duration.ofMillis(acquireTimeout))
+		                    .pendingAcquireTimeout(Duration.ofMillis(acquireTimeout))
 		                    .maxIdleTime(maxIdleTime)
 		                    .maxLifeTime(maxLifeTime)
 		                    .build();
@@ -328,13 +328,13 @@ public interface ConnectionProvider extends Disposable {
 	/**
 	 * Build a {@link ConnectionProvider} to cache and reuse a fixed maximum number of
 	 * {@link Connection}. Further connections will be pending acquisition depending on
-	 * pendingAcquireTime.
+	 * pendingAcquireTimeout.
 	 */
 	final class Builder {
 		String   name;
 		int      maxConnections         = DEFAULT_POOL_MAX_CONNECTIONS;
 		int      pendingAcquireMaxCount = PENDING_ACQUIRE_UNBOUNDED;
-		Duration pendingAcquireTime     = Duration.ofMillis(DEFAULT_POOL_ACQUIRE_TIMEOUT);
+		Duration pendingAcquireTimeout  = Duration.ofMillis(DEFAULT_POOL_ACQUIRE_TIMEOUT);
 		Duration maxIdleTime;
 		Duration maxLifeTime;
 
@@ -363,36 +363,29 @@ public interface ConnectionProvider extends Disposable {
 		 * Set the options to use for configuring {@link ConnectionProvider} acquire timeout.
 		 * Default to {@link #DEFAULT_POOL_ACQUIRE_TIMEOUT}.
 		 *
-		 * @param pendingAcquireTime the maximum time after which a pending acquire
+		 * @param pendingAcquireTimeout the maximum time after which a pending acquire
 		 * must complete or the {@link TimeoutException} will be thrown (resolution: ms)
 		 * @return {@literal this}
-		 * @throws NullPointerException if pendingAcquireTime is null
+		 * @throws NullPointerException if pendingAcquireTimeout is null
 		 */
-		public final Builder pendingAcquireTime(Duration pendingAcquireTime) {
-			this.pendingAcquireTime = Objects.requireNonNull(pendingAcquireTime, "pendingAcquireTime");
+		public final Builder pendingAcquireTimeout(Duration pendingAcquireTimeout) {
+			this.pendingAcquireTimeout = Objects.requireNonNull(pendingAcquireTimeout, "pendingAcquireTimeout");
 			return this;
 		}
 
 		/**
 		 * Set the options to use for configuring {@link ConnectionProvider} maximum connections.
 		 * Default to {@link #DEFAULT_POOL_MAX_CONNECTIONS}.
-		 * When invoked with {@link #MAX_CONNECTIONS_UNBOUNDED} an elastic ConnectionProvider will be created.
-		 * pendingAcquireTime will be set automatically to {@link #PENDING_ACQUIRE_TIME_NEVER_WAIT} and pendingAcquireMaxCount
-		 * to {@link #PENDING_ACQUIRE_UNBOUNDED}.
 		 *
 		 * @param maxConnections the maximum number of connections before start pending
 		 * @return {@literal this}
 		 * @throws IllegalArgumentException if maxConnections is negative
 		 */
 		public final Builder maxConnections(int maxConnections) {
-			if (maxConnections != MAX_CONNECTIONS_UNBOUNDED && maxConnections <= 0) {
+			if (maxConnections <= 0) {
 				throw new IllegalArgumentException("Max Connections value must be strictly positive");
 			}
 			this.maxConnections = maxConnections;
-			if (maxConnections == MAX_CONNECTIONS_UNBOUNDED) {
-				pendingAcquireTime(Duration.ofMillis(PENDING_ACQUIRE_TIME_NEVER_WAIT));
-				pendingAcquireMaxCount(PENDING_ACQUIRE_UNBOUNDED);
-			}
 			return this;
 		}
 
@@ -458,14 +451,14 @@ public interface ConnectionProvider extends Disposable {
 			return maxConnections == builder.maxConnections &&
 			        pendingAcquireMaxCount == builder.pendingAcquireMaxCount &&
 			        name.equals(builder.name) &&
-			        pendingAcquireTime.equals(builder.pendingAcquireTime) &&
+			        pendingAcquireTimeout.equals(builder.pendingAcquireTimeout) &&
 			        Objects.equals(maxIdleTime, builder.maxIdleTime) &&
 			        Objects.equals(maxLifeTime, builder.maxLifeTime);
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(name, pendingAcquireTime, maxConnections, pendingAcquireMaxCount, maxIdleTime, maxLifeTime);
+			return Objects.hash(name, pendingAcquireTimeout, maxConnections, pendingAcquireMaxCount, maxIdleTime, maxLifeTime);
 		}
 	}
 }
